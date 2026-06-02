@@ -1,88 +1,110 @@
-#ifndef __MOTOR_H
+#ifndef __MOTOR_H // å»ºè®®ç”¨åŒä¸‹åˆ’çº¿ï¼Œæ ‡å‡†åšæ³•
 #define __MOTOR_H
+
 #include "stm32f4xx_hal.h"
+#include "pid.h"
+
+//posï¼Œspeedï¼Œrpsï¼Œturnsï¼Œpwm_dutyè¿™äº›ç‰©ç†é‡æ˜¯éšæ—¶å¯ä»¥æŸ¥çœ‹çš„
+//è€Œç›®æ ‡å€¼åªæœ‰è®¾ç½®äº†é‚£ä¸€é¡¹æ‰èƒ½æŸ¥çœ‹
 
 
+// // ====================================================================
+// // åŸºç¡€ç‰©ç†å‚æ•°å®šä¹‰ï¼šJGB37-520 ç”µæœºå‚æ•° (12V 330RPMç‰ˆæœ¬)
+// // ====================================================================
+// #define MOTOR_RATED_RPM          330.0f  // å®˜æ–¹é¢å®šè½¬é€Ÿï¼š330 è½¬/åˆ†é’Ÿ (RPM)
+// #define ENCODER_REDUCTION_RATIO  34.0f   // å‡é€Ÿæ¯”ï¼š1:34
+// #define ENCODER_PPR              11.0f   // ç¼–ç å™¨çº¿æ•°ï¼šç£ç¯å•ç›¸ 11 ä¸ªè„‰å†²/ è½®å­æ—‹è½¬ä¸€æ•´åœˆï¼Œå•ç‰‡æœº 4 å€é¢‘æ•è·åˆ°çš„æ€»è„‰å†²æ•°ï¼š11 * 4 * 34 = 1496.0f
+//
+// // è½®å­è½¬ä¸€åœˆæ€»è„‰å†²æ•°ï¼š11 * 4 * 34 = 1496.0f
+// #define ENCODER_TOTAL_PPR        (ENCODER_PPR * 4.0f * ENCODER_REDUCTION_RATIO)
 
 
+// ====================================================================
+// åŸºç¡€ç‰©ç†å‚æ•°å®šä¹‰ï¼šMG513P30-12V ç”µæœºå‚æ•°
+// ====================================================================
+#define MOTOR_RATED_RPM          300.0f  // é¢å®šè¾“å‡ºè½¬é€Ÿçº¦ 300 RPM
+#define ENCODER_REDUCTION_RATIO  30.0f   // å‡é€Ÿæ¯”ï¼š1:30
+#define ENCODER_PPR              500.0f  // ç¼–ç å™¨çº¿æ•°ï¼š500çº¿
 
-// »ù´¡ÎïÀí²ÎÊı¶¨Òå£ºJGB37-520 µç»ú²ÎÊı (12V 330RPM°æ±¾)
-#define MOTOR_RATED_RPM          330.0f  // ¹Ù·½¶î¶¨×ªËÙ£º330 ×ª/·ÖÖÓ (RPM)
-#define ENCODER_REDUCTION_RATIO  34.0f   // ¼õËÙ±È£º1:34
-#define ENCODER_PPR              11.0f   // ±àÂëÆ÷ÏßÊı£º´Å»·µ¥Ïà 11 ¸öÂö³å/ ÂÖ×ÓĞı×ªÒ»ÕûÈ¦£¬µ¥Æ¬»ú 4 ±¶Æµ²¶»ñµ½µÄ×ÜÂö³åÊı£º11 * 4 * 34 = 1496.0f
-
-
-// ÂÖ×Ó×ªÒ»È¦×ÜÂö³åÊı£º11 * 4 * 34 = 1496.0f
+// è½®å­è½¬ä¸€åœˆæ€»è„‰å†²æ•°ï¼š500 * 4 * 30 = 60000.0f
 #define ENCODER_TOTAL_PPR        (ENCODER_PPR * 4.0f * ENCODER_REDUCTION_RATIO)
-// µç»úÎïÀí¼«ÏŞ×î´ó×ªËÙ (×ª/Ãë)£º330.0f / 60.0f = 5.5f r/s
+
+// ç”µæœºç‰©ç†æé™æœ€å¤§è½¬é€Ÿ (è½¬/ç§’)ï¼š300.0f / 60.0f = 5f r/s
 #define MOTOR_MAX_RPS            (MOTOR_RATED_RPM / 60.0f)
-// Ó²¼ş ËÙ¶È ×î´óÏŞÖÆ
+// ç¡¬ä»¶ é€Ÿåº¦ æœ€å¤§é™åˆ¶  10ms ä¸­æ–­å†…ç¡¬ä»¶é€Ÿåº¦åé¦ˆ(delta)çš„æœ€å¤§ç†è®ºå€¼ 5.0 * (60000.0 / 100.0) = 3000.0f
 #define SPEED_OUTPUT_MAX         MOTOR_MAX_RPS * (ENCODER_TOTAL_PPR / 100.0f)
-// Ó²¼ş PWM ×î´óÏŞÖÆ
-#define MOTOR_PWM_MAX            1000    // PWM ×î´óÊä³öÖµ (¶ÔÓ¦¶¨Ê±Æ÷ ARR)
+// ç¡¬ä»¶ PWM æœ€å¤§é™åˆ¶
+#define MOTOR_PWM_MAX            1000    // PWM æœ€å¤§è¾“å‡ºå€¼ (å¯¹åº”å®šæ—¶å™¨ ARR)
 
-// --- ËÙ¶È»· PID ²ÎÊı (Speed Loop) ---
-#define MOTOR_SPEED_KP           0.01f   // ±ÈÀıÏµÊı
-#define MOTOR_SPEED_KI           0.0005f   // »ı·ÖÏµÊı
-#define MOTOR_SPEED_KD           0.00f   // Î¢·ÖÏµÊı
-#define MOTOR_SPEED_I_LIMIT      40.0f  // »ı·ÖÏŞ·ù (·ÀÖ¹»ı·Ö±¥ºÍ)
+// --- é€Ÿåº¦ç¯ PID å‚æ•° (Speed Loop) ---
+// #define MOTOR_SPEED_KP           30.0f   // æ¯”ä¾‹ç³»æ•°
+// #define MOTOR_SPEED_KI           1.5f   // ç§¯åˆ†ç³»æ•°
+// #define MOTOR_SPEED_KD           1.0f   // å¾®åˆ†ç³»æ•°
+// #define MOTOR_SPEED_I_LIMIT      1000.0f  // ç§¯åˆ†é™å¹… (é˜²æ­¢ç§¯åˆ†é¥±å’Œ)
 
-// --- Î»ÖÃ»· PID ²ÎÊı (Position Loop - ¹ì¼£¹æ»®¸¨Öú) ---
+#define MOTOR_SPEED_KP           1.5f   // æ¯”ä¾‹ç³»æ•°
+#define MOTOR_SPEED_KI           0.2f   // ç§¯åˆ†ç³»æ•°
+#define MOTOR_SPEED_KD           0.5f   // å¾®åˆ†ç³»æ•°
+#define MOTOR_SPEED_I_LIMIT      1500.0f  // ç§¯åˆ†é™å¹… (é˜²æ­¢ç§¯åˆ†é¥±å’Œ)
+
+// --- ä½ç½®ç¯ PID å‚æ•° (Position Loop - è½¨è¿¹è§„åˆ’è¾…åŠ©) ---
 #define MOTOR_POS_KP             0.50f
 #define MOTOR_POS_KI             0.00f
 #define MOTOR_POS_KD             0.00f
 
-
-// 1. µç»úÄ£Ê½Ã¶¾Ù (±ÈÓÃ 0,1,2 ¸üÖ±¹Û)
+// 1. ç”µæœºæ¨¡å¼æšä¸¾ (æ¯”ç”¨ 0,1,2 æ›´ç›´è§‚)
 typedef enum {
-    MOTOR_MODE_OPEN_LOOP = 0, // ¿ª»·
-    MOTOR_MODE_SPEED,         // µ¥ËÙ¶È±Õ»·
-    MOTOR_MODE_POSITION       // ´®¼¶Î»ÖÃ±Õ»·
+    MOTOR_MODE_OPEN_LOOP = 0, // å¼€ç¯
+    MOTOR_MODE_SPEED,         // å•é€Ÿåº¦é—­ç¯
+    MOTOR_MODE_POSITION,       // ä¸²çº§ä½ç½®é—­ç¯
 } MotorMode_e;
 
 
-// 2. µç»ú½á¹¹Ìå
+
+// 2. ç”µæœºç»“æ„ä½“
 typedef struct {
-    // --- Ó²¼şÓ³Éä²ã ---
-    GPIO_TypeDef*       IN1_Port;
+    // --- ç¡¬ä»¶æ˜ å°„å±‚ ---
+    GPIO_TypeDef* IN1_Port;
     uint16_t            IN1_Pin;
-    GPIO_TypeDef*       IN2_Port;
+    GPIO_TypeDef* IN2_Port;
     uint16_t            IN2_Pin;
-    TIM_HandleTypeDef*  PWM_Tim;
+    TIM_HandleTypeDef* PWM_Tim;
     uint32_t            PWM_Channel;
-    TIM_HandleTypeDef*  ENC_Tim;
+    TIM_HandleTypeDef* ENC_Tim;
 
-    // --- ÎïÀí×´Ì¬²ã ---
-    float               pwm_target;  // ¿ª»·Ä£Ê½ÏÂµÄÄ¿±êÕ¼¿Õ±È
-    uint16_t            pwm_duty;    // µ±Ç°Êµ¼ÊÊä³öµÄÕ¼¿Õ±È (0-1000)
+    // --- ç‰©ç†çŠ¶æ€å±‚ ---
+    float               pwm_target;  // å¼€ç¯æ¨¡å¼ä¸‹çš„ç›®æ ‡å ç©ºæ¯”
+    uint16_t            pwm_duty;    // å½“å‰å®é™…è¾“å‡ºçš„å ç©ºæ¯” (0-1000)
 
-    float               speed_target; //Ä¿±êËÙ¶È
-    float               speed;        // µ±Ç°ËÙ¶È (Âö³å/10ms)
-    uint32_t            last_cnt;     // ÉÏÒ»´ÎµÄËÙ¶È
+    float               speed_target;      //ç›®æ ‡é€Ÿåº¦ï¼Œå·²åœ¨PID_TypeDefå®šä¹‰
+    float               speed;       // å½“å‰é€Ÿåº¦ (è„‰å†²/10ms)
+    uint32_t            last_cnt;    // ä¸Šä¸€æ¬¡çš„é€Ÿåº¦
 
-    float               rps_target;       // Ä¿±ê×ªËÙ
-    float               rps;             // µ±Ç°×ªËÙ
+    float               rps_target;       // ç›®æ ‡è½¬é€Ÿ
+    float               rps;       // å½“å‰è½¬é€Ÿ
 
-    int64_t             pos_target;  // Ä¿±êÎ»ÖÃ
-    int64_t             pos;         // ¾ø¶ÔÂö³åÎ»ÖÃ
-    float               turns_target;  // Ä¿±êÈ¦Êı
-    float               turns;         // µ±Ç°È¦Êı
+    int64_t             pos_target;  // ç›®æ ‡ä½ç½®
+    int64_t             pos;         // ç»å¯¹è„‰å†²ä½ç½®
+    float               turns_target;  // ç›®æ ‡åœˆæ•°
+    float               turns;         // å½“å‰åœˆæ•°
 
-    // --- Ëã·¨¿ØÖÆ²ã ---
-    // PID_TypeDef         speed_pid;
-    // PID_TypeDef         pos_pid;
 
-    // --- ×´Ì¬Ñ¡Ôñ ---
+
+    // --- ç®—æ³•æ§åˆ¶å±‚ ---
+    PID_TypeDef         speed_pid;
+    PID_TypeDef         pos_pid;
+
+    // --- çŠ¶æ€é€‰æ‹© ---
     MotorMode_e         ctrl_mode;
 } Motor_HandleTypeDef;
 
-
-
+// --- å…¨å±€ç”µæœºå¯¹è±¡å£°æ˜ ---
 extern Motor_HandleTypeDef MotorA;
-
+extern Motor_HandleTypeDef MotorB;
+// --- æ ¸å¿ƒå‡½æ•°å£°æ˜ ---
 
 /**
- * @brief µç»ú³õÊ¼»¯º¯Êı (´ø²ÎÊı£¬Ò»Ì×´úÂë³õÊ¼»¯ËùÓĞµç»ú)
+ * @brief ç”µæœºåˆå§‹åŒ–å‡½æ•° (å¸¦å‚æ•°ï¼Œä¸€å¥—ä»£ç åˆå§‹åŒ–æ‰€æœ‰ç”µæœº)
  */
 void Motor_Init(Motor_HandleTypeDef *hmotor,
                 GPIO_TypeDef* port1, uint16_t pin1,
@@ -91,5 +113,11 @@ void Motor_Init(Motor_HandleTypeDef *hmotor,
                 TIM_HandleTypeDef* enc_tim);
 
 void Motor_Set_PWM(Motor_HandleTypeDef *hmotor, int32_t pwm_val);
-void Motor_Tick_10ms(Motor_HandleTypeDef *hmotor);
+
+// /**
+//  * @brief ç´§æ€¥åœæ­¢ (æ‰€æœ‰ç”µæœºå ç©ºæ¯”å½’é›¶å¹¶å…³é—­æ¨¡å¼)
+//  */
+// void Motor_Stop(Motor_HandleTypeDef *hmotor);
+//
+
 #endif

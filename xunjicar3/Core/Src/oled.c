@@ -139,15 +139,26 @@ void OLED_ShowChar(uint8_t x,uint8_t y,uint8_t chr,uint8_t Char_Size)
 			}
 }
  
-//显示一个字符号串
-void OLED_ShowString(uint8_t x,uint8_t y,uint8_t *chr,uint8_t Char_Size)
+// 显示一个字符串（自动对齐字距与换行版）
+void OLED_ShowString(uint8_t x, uint8_t y, uint8_t *chr, uint8_t Char_Size)
 {
-	unsigned char j=0;
-	while (chr[j]!='\0')
-	{		OLED_ShowChar(x,y,chr[j],Char_Size);
-			x+=8;
-		if(x>120){x=0;y+=2;}
-			j++;
+	unsigned char j = 0;
+	while (chr[j] != '\0')
+	{
+		OLED_ShowChar(x, y, chr[j], Char_Size);
+
+		// 根据字号动态计算下一个字符的位置
+		if (Char_Size == 16)
+		{
+			x += 8;             // 16号字宽度为 8 像素
+			if (x > 120) { x = 0; y += 2; } // 16号字高度占 2 页
+		}
+		else
+		{
+			x += 6;             // 小号字宽度只有 6 像素！
+			if (x > 122) { x = 0; y += 1; } // 小号字高度只占 1 页
+		}
+		j++;
 	}
 }
 //显示汉字

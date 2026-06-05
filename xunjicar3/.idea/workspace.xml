@@ -28,24 +28,15 @@
     </configurations>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="cd9ef5a6-adcd-4132-91aa-520945b2eb38" name="更改" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.cproject" beforeDir="false" afterPath="$PROJECT_DIR$/.cproject" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.mxproject" beforeDir="false" afterPath="$PROJECT_DIR$/.mxproject" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Configer/CMSIS_DAP.cfg" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Configer/DAPLINK.cfg" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/Configer/STLINK.cfg" beforeDir="false" />
+    <list default="true" id="cd9ef5a6-adcd-4132-91aa-520945b2eb38" name="更改" comment="基本完善的代码">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Core/Configer/CMSIS_DAP.cfg" beforeDir="false" afterPath="$PROJECT_DIR$/Core/Configer/CMSIS_DAP.cfg" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Core/Configer/STLINK.cfg" beforeDir="false" afterPath="$PROJECT_DIR$/Core/Configer/STLINK.cfg" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Core/Inc/control.h" beforeDir="false" afterPath="$PROJECT_DIR$/Core/Inc/control.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Core/Inc/motor.h" beforeDir="false" afterPath="$PROJECT_DIR$/Core/Inc/motor.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Core/Inc/stm32f4xx_it.h" beforeDir="false" afterPath="$PROJECT_DIR$/Core/Inc/stm32f4xx_it.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Core/Inc/tim.h" beforeDir="false" afterPath="$PROJECT_DIR$/Core/Inc/tim.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Core/Inc/usart.h" beforeDir="false" afterPath="$PROJECT_DIR$/Core/Inc/usart.h" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Core/Src/control.c" beforeDir="false" afterPath="$PROJECT_DIR$/Core/Src/control.c" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Core/Src/gpio.c" beforeDir="false" afterPath="$PROJECT_DIR$/Core/Src/gpio.c" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Core/Src/main.c" beforeDir="false" afterPath="$PROJECT_DIR$/Core/Src/main.c" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Core/Src/motor.c" beforeDir="false" afterPath="$PROJECT_DIR$/Core/Src/motor.c" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Core/Src/oled.c" beforeDir="false" afterPath="$PROJECT_DIR$/Core/Src/oled.c" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Core/Src/stm32f4xx_it.c" beforeDir="false" afterPath="$PROJECT_DIR$/Core/Src/stm32f4xx_it.c" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Core/Src/tim.c" beforeDir="false" afterPath="$PROJECT_DIR$/Core/Src/tim.c" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Core/Src/usart.c" beforeDir="false" afterPath="$PROJECT_DIR$/Core/Src/usart.c" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/xunjicar3.ioc" beforeDir="false" afterPath="$PROJECT_DIR$/xunjicar3.ioc" afterDir="false" />
     </list>
@@ -72,9 +63,9 @@
   &quot;associatedIndex&quot;: 1
 }</component>
   <component name="ProjectId" id="3E6J4foPT6ONv05i394AffM2zx5" />
-  <component name="ProjectStatusUIService"><![CDATA[{
-  "uiKindId": "Widget"
-}]]></component>
+  <component name="ProjectStatusUIService">{
+  &quot;uiKindId&quot;: &quot;Widget&quot;
+}</component>
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
@@ -140,8 +131,31 @@
       <workItem from="1779955911026" duration="1082000" />
       <workItem from="1780124480413" duration="613000" />
       <workItem from="1780364400777" duration="956000" />
-      <workItem from="1780366504248" duration="8796000" />
+      <workItem from="1780366504248" duration="9246000" />
+      <workItem from="1780396860112" duration="3353000" />
+      <workItem from="1780408780964" duration="319000" />
+      <workItem from="1780409388606" duration="711000" />
+      <workItem from="1780410116560" duration="1057000" />
+      <workItem from="1780411470133" duration="3445000" />
+      <workItem from="1780455867597" duration="5155000" />
+      <workItem from="1780485491641" duration="1351000" />
+      <workItem from="1780486926534" duration="3807000" />
+      <workItem from="1780491024577" duration="9241000" />
+      <workItem from="1780573856838" duration="1355000" />
+      <workItem from="1780575485196" duration="4964000" />
+      <workItem from="1780581560352" duration="1946000" />
+      <workItem from="1780636963744" duration="3392000" />
+      <workItem from="1780641804183" duration="12986000" />
     </task>
+    <task id="LOCAL-00001" summary="基本完善的代码">
+      <option name="closed" value="true" />
+      <created>1780380552517</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1780380552518</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -151,5 +165,9 @@
     <isAutomaticCheckingOnLaunch value="false" />
     <isAutomaticFoundErrors value="true" />
     <isAutomaticReloadCMake value="true" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="基本完善的代码" />
+    <option name="LAST_COMMIT_MESSAGE" value="基本完善的代码" />
   </component>
 </project>

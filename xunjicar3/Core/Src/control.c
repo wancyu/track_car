@@ -13,9 +13,12 @@ int64_t start_check_pos = 0; // 记录开始校验全白时的绝对脉冲
 int64_t start_stop_pos = 0;  // 记录开始计距停车时的绝对脉冲
 uint8_t finish_camera_task = 0;  //完成视觉识别任务标志
 uint32_t alarm_tick = 0; //上一次鸣笛时间
-
+uint32_t  enter_mode_tick = 0;
+int label = 1;
+int is_dir = 1;
 int s1,s2,s3,s4,s5;
-int sum, cnt;
+int cnt;
+int sum;
 /**
  * @brief  上层策略与外环 PID 初始化
  */
@@ -23,8 +26,17 @@ void Car_Strategy_Init(void)
 {
     // --- 1. 默认状态设置 ---
     car_mode = MODE_LINE_TRACKING;
-    Current_Stop_State = 0;
+    Current_Stop_State = STATE_TRACKING;
     tracker.dir_locked = 0;
+
+    tracker.standard_speed = STANDARD_SPEED;           // 设定你的基准标准速度(根据底层极速3000自定)
+    tracker.base_speed     = BASE_SPEED;           // 初始基础速度与标准速度对齐
+    tracker.base_kp        = MOTOR_TRACK_KP;   //
+    tracker.base_kd        = MOTOR_TRACK_KD;   //
+    tracker.track_error    = 0.0f;
+    tracker.last_dir       = 0;
+
+
     // --- 2. 循迹环 PID 初始化 ---
     PID_Init(&tracker.track_pid,
              MOTOR_TRACK_KP, MOTOR_TRACK_KI, MOTOR_TRACK_KD,
@@ -45,15 +57,15 @@ void alarm()
 {
     Car_Set_Speed(&MotorA, 0.0f);
     Car_Set_Speed(&MotorB, 0.0f);
-    // HAL_GPIO_WritePin(Buzzer_GPIO_Port, Buzzer_Pin, GPIO_PIN_SET);
-    // HAL_GPIO_WritePin(Buzzer_GPIO_Port, Buzzer_Pin, GPIO_PIN_SET);
-    if (HAL_GetTick() - alarm_tick >= 3000)
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+    if (HAL_GetTick() - alarm_tick >= 1500)
     {
-        Car_Set_Speed(&MotorA, 0.0f);
-        Car_Set_Speed(&MotorB, 0.0f);
-        // HAL_GPIO_WritePin(Buzzer_GPIO_Port, Buzzer_Pin, GPIO_PIN_RESET);
-        // HAL_GPIO_WritePin(Buzzer_GPIO_Port, Buzzer_Pin, GPIO_PIN_RESET);
-         car_mode = MODE_BACKING;
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+        car_mode = MODE_BACKING;
+        enter_mode_tick = HAL_GetTick();
+        label = 0;
     }
 }
 
@@ -66,12 +78,13 @@ void track_camera(float err_x, float distance)
 
     // 精密定距死区管理
     float current_error = distance - TARGET_CAMERA_STOP_DISTANCE;
-    if (current_error > -1.5f && current_error < 1.5f)
+    if (current_error < 2.0f)
     {
         forward_speed = 0.0f;
         PID_Reset(&forward_pid);
         finish_camera_task = 1;
         car_mode = MODE_STANDBY;             // 切换到鸣笛状态
+        alarm_tick = HAL_GetTick();
     }
 
     // 2. 差速混合
@@ -105,23 +118,24 @@ void track_camera(float err_x, float distance)
  */
 void Sensor_Global_Scan(Tracking_HandleTypeDef *ptrack)
 {
-    s1 = !HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
-    s2 = !HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_1);
-    s3 = !HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_2);
-    s4 = !HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_3);
-    s5 = !HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_4);
+    s1 = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8);
+    s2 = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_15);
+    s3 = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_14);
+    s4 = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_13);
+    s5 = HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_12);
 
     sum = 0, cnt = 0;
-    if (s1) { sum += -2; cnt++; }
-    if (s2) { sum += -1; cnt++; }
+    if (s5) { sum += -4; cnt++; }
+    if (s4) { sum += -2; cnt++; }
     if (s3) { sum +=  0; cnt++; }
-    if (s4) { sum +=  1; cnt++; }
-    if (s5) { sum +=  2; cnt++; }
+    if (s2) { sum +=  2; cnt++; }
+    if (s1) { sum +=  4; cnt++; }
 
     // 视觉模式，白线，方向锁定
-    if (car_mode == MODE_VISION_FOLLOW && cnt == 0)
+    if (car_mode == MODE_VISION_FOLLOW && cnt == 0 && is_dir ==1)
     {
         ptrack->dir_locked = 1;
+        is_dir = 0;
     }
     // 找线模式，方向解锁
     if (car_mode == MODE_BACKING)
@@ -141,88 +155,87 @@ void Sensor_Global_Scan(Tracking_HandleTypeDef *ptrack)
         cnt = 0; // 地上没线了
     }
 }
-
-
 /**
- * @brief 速度映射的位置环算法
+ * @brief 优化后的速度映射与精准停靠算法 (完美抗手测/粗黑线版)
  */
-void Track_line(Tracking_HandleTypeDef *ptrack,Motor_HandleTypeDef *left_motor, Motor_HandleTypeDef *right_motor)
+void Track_line(Tracking_HandleTypeDef *ptrack, Motor_HandleTypeDef *left_motor, Motor_HandleTypeDef *right_motor)
 {
-    //sum，cnt，s1-s5 数据已写入本文件定义的变量中
-    ptrack->dir_locked = 0;
+    // --- 1. 状态机核心逻辑 ---
     switch (Current_Stop_State)
     {
-    case STOP_STATE_TRACKING:
-        // 5路全黑，触发全黑状态，无法区分十字路口还是终点
+    case STATE_TRACKING:
+        // 1. 一旦五路全黑，立刻记录绝对脉冲起点，进入跨线状态
         if (s1 && s2 && s3 && s4 && s5)
         {
-            Current_Stop_State = STOP_STATE_ENTER_BLACK;
+            start_stop_pos = left_motor->pos;
+            Current_Stop_State = STATE_CROSSING_BAR;
         }
         break;
 
-    case STOP_STATE_ENTER_BLACK:
-        // 等待车头探出全黑区域。一旦全白(cnt == 0)，说明冲出了横线，进入全白校验期
-        if (cnt == 0)
+    case STATE_CROSSING_BAR:
+        // 2. 盲走一段固定距离，确保车头“有资格”压过横线
+        if (llabs(left_motor->pos - start_stop_pos) >= (int64_t)CROSS_BAR_DISTANCE)
         {
-            start_check_pos = left_motor->pos; // 记录当前编码器位置
-            Current_Stop_State = STOP_STATE_CHECK_WHITE;
+            // 只有当传感器终于离开了全黑区域，我们才“开眼”看路况：
+            if (cnt == 0)
+            {
+                // 手彻底拿开了，前面全白！确信是车库无疑
+                Current_Stop_State = STATE_MOVE_TO_GARAGE;
+            }
+            else
+            {
+                // 如果手拿开后捂住了边缘(cnt 1~4)，或者真实赛道上看到了单根黑线，说明是十字路口
+                Current_Stop_State = STATE_TRACKING;
+            }
         }
         break;
 
-    case STOP_STATE_CHECK_WHITE:
-        // 在校验期内,盲走一定距离，如果又检测到了黑线 (cnt != 0)，说明刚才那是个十字路口！
-        if (cnt != 0)
-        {
-            Current_Stop_State = STOP_STATE_TRACKING; // 判定误报，退回正常循迹模式
-        }
-        // 如果稳稳当当地盲走了 4 厘米，期间没有任何传感器碰到黑线，说明这绝对是终点的全白广场
-        else if (llabs(left_motor->pos - start_check_pos) >= (int64_t)CHECK_WHITE_DISTANCE)
-        {
-            start_stop_pos = left_motor->pos; // 开始计算最后的停车距离
-            Current_Stop_State = STOP_STATE_MOVE_DISTANCE;
-        }
-        break;
-
-    case STOP_STATE_MOVE_DISTANCE:
-        // 确认进入终点框，直线匀速走完最后一段距离
+    case STATE_MOVE_TO_GARAGE:
+        // 3. 确认是车库，定距冲刺
         if (llabs(left_motor->pos - start_stop_pos) >= (int64_t)TARGET_STOP_DISTANCE)
         {
-            Current_Stop_State = STOP_STATE_FINISHED;
+            Current_Stop_State = STATE_FINISHED;
         }
         break;
 
-    case STOP_STATE_FINISHED:
-        // 彻底刹车
+    case STATE_FINISHED:
+        // 4. 彻底刹车锁定
         break;
     }
 
     // --- 2. 行为分发（动作路由） ---
-    if (Current_Stop_State == STOP_STATE_TRACKING || Current_Stop_State == STOP_STATE_ENTER_BLACK)
+    if (Current_Stop_State == STATE_TRACKING)
     {
-        // 正常循迹
-        if (cnt != 0) { ptrack->track_error = (float)sum / (float)cnt; }
-        const float speed_ratio = ptrack->base_speed / ptrack->standard_speed;
-        ptrack->track_pid.Kp = ptrack->base_kp * speed_ratio;
-        ptrack->track_pid.Kd = ptrack->base_kd * speed_ratio;
+        // 正常循迹 PID 逻辑
+        if (cnt != 0)
+        {
+            ptrack->track_error = (float)sum / (float)cnt;
 
-        float bias_output = PID_Calc(&ptrack->track_pid, 0.0f, ptrack->track_error);
-        left_motor->speed_target  = ptrack->base_speed + bias_output;
-        right_motor->speed_target = ptrack->base_speed - bias_output;
+            const float speed_ratio = ptrack->base_speed / ptrack->standard_speed;
+            ptrack->track_pid.Kp = ptrack->base_kp * speed_ratio;
+            ptrack->track_pid.Kd = ptrack->base_kd * speed_ratio;
 
-        Car_Set_Speed(left_motor, ptrack->base_speed + bias_output);
-        Car_Set_Speed(right_motor, ptrack->base_speed - bias_output);
+            float bias_output = PID_Calc(&ptrack->track_pid, 0.0f, ptrack->track_error);
+            Car_Set_Speed(left_motor, ptrack->base_speed + bias_output);
+            Car_Set_Speed(right_motor, ptrack->base_speed - bias_output);
+        }
+        else
+        {
+            // 防暴走保护：万一循迹中途突然丢线全白，清空 I 积分，防止差速拉满
+            Car_Set_Speed(left_motor, ptrack->base_speed);
+            Car_Set_Speed(right_motor, ptrack->base_speed);
+        }
     }
-    else if (Current_Stop_State == STOP_STATE_CHECK_WHITE || Current_Stop_State == STOP_STATE_MOVE_DISTANCE)
+    else if (Current_Stop_State == STATE_CROSSING_BAR || Current_Stop_State == STATE_MOVE_TO_GARAGE)
     {
-        // 在“全白校验期”和“确认终点后前行期”，地上都是全白，
-        // 此时直接闭环走直线（单速度模式），不受任何循迹偏差干扰
-        Car_Set_Speed(left_motor, ptrack->base_speed);
-        Car_Set_Speed(right_motor, ptrack->base_speed);
-
-
+        // 过线和进库冲刺期间，直接闭环走直线
+        // 建议给 0.6 倍速，既有惯性防抖，又不会冲太快刹不住
+        Car_Set_Speed(left_motor, ptrack->base_speed * 0.6f);
+        Car_Set_Speed(right_motor, ptrack->base_speed * 0.6f);
     }
-    else if (Current_Stop_State == STOP_STATE_FINISHED)
+    else if (Current_Stop_State == STATE_FINISHED)
     {
+        // 刹车重置
         if (left_motor->ctrl_mode != MOTOR_MODE_POSITION)
         {
             PID_Reset(&left_motor->pos_pid);
@@ -236,12 +249,11 @@ void Track_line(Tracking_HandleTypeDef *ptrack,Motor_HandleTypeDef *left_motor, 
     }
 }
 
-
 /**
  * @brief 找线模式（依靠脱轨前冻结的记忆切回黑线，融入低通滤波与刚性限速）
  * @note  对应应用层 control 中的返回找线功能，高频 10ms 周期性调用
  */
-void Back_line(Tracking_HandleTypeDef *ptrack)
+void Back_line(Tracking_HandleTypeDef *ptrack, Motor_HandleTypeDef *left_motor, Motor_HandleTypeDef *right_motor)
 {
 
     float raw_target_L = 0.0f;
@@ -251,13 +263,13 @@ void Back_line(Tracking_HandleTypeDef *ptrack)
     float recovery_base = ptrack->base_speed * 0.7f;
 
     // 根据 Sensor_Global_Scan 里死死冻结的 last_dir 给出非对称开环差速
-    if (ptrack->last_dir == -1)
+    if (ptrack->last_dir == 1)
     {
         // 记忆中线在左边（车在右）：向左前方弧线内切（左轮慢，右轮快）
         raw_target_L = recovery_base * 0.3f;
         raw_target_R = recovery_base * 1.4f;
     }
-    else if (ptrack->last_dir == 1)
+    else if (ptrack->last_dir == -1)
     {
         // 记忆中线在右边（车在左）：向右前方弧线内切（左轮快，右轮慢）
         raw_target_L = recovery_base * 1.4f;
@@ -288,23 +300,33 @@ void Back_line(Tracking_HandleTypeDef *ptrack)
     filtered_R = (filtered_R * 0.80f) + (raw_target_R * 0.20f);
 
     // 5顺畅输出给底层速度环
-    Car_Set_Speed(&MotorA, filtered_L);
-    Car_Set_Speed(&MotorB, filtered_R);
+    Car_Set_Speed(left_motor, filtered_L);
+    Car_Set_Speed(right_motor, filtered_R);
 
-    // 自动接轨退出机制（闭环回归）
     // 只要后台一直运行的全局扫描发现任意红外探头重新压回黑线（cnt != 0）
+
+    if (HAL_GetTick() - enter_mode_tick > 1500)
+    {
+        label = 1;
+    }
+    else
+    {
+        label = 0;
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_RESET);
+    }
     if (cnt != 0)
     {
-        // 瞬间切回正常循迹模式，控制权交还给 Track_line
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_SET);
         car_mode = MODE_LINE_TRACKING;
 
         // 主动解开方向记忆锁，为下一次接近物体做准备
         ptrack->dir_locked = 0;
 
-        // 关键一步：手动清空当前滤波器的静态局部变量，防止下次进入该模式时产生历史数据残留
+        // 恢复低通滤波器缓存
         filtered_L = 0.0f;
         filtered_R = 0.0f;
     }
+
 }
 
 /**
@@ -438,17 +460,19 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     if (htim->Instance == TIM10)
     {
         Sensor_Global_Scan(&tracker);
-        if (car_mode == MODE_STANDBY) //鸣笛处理，这个对称美，就放着了
-        {
-            void alarm();
-        }
+
         if (car_mode == MODE_LINE_TRACKING) //这个要严格控制10ms执行一次所以放在这判断
         {
+
             Track_line(&tracker,&MotorA, &MotorB);  //循迹模式
+        }
+        if (car_mode == MODE_STANDBY) //鸣笛处理，这个对称美，就放着了
+        {
+            alarm();
         }
         if (car_mode == MODE_BACKING) //这个要严格控制10ms执行一次所以放在这判断
         {
-            Back_line(&tracker);
+            Back_line(&tracker, &MotorA, &MotorB);
         }
         Motor_Tick_10ms(&MotorA);  //电机A pwm输出
         Motor_Tick_10ms(&MotorB);  //电机B pwm输出

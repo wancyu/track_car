@@ -36,12 +36,13 @@
 /* USER CODE BEGIN PTD */
 
 uint32_t last_tick = 0; //oled 调试信息上次打印的时间
-uint8_t display_buf[20];  //显示信息缓冲区
-uint32_t last_vision_time = 0; //上一次视觉识别时间，这个不应该放在这？
-
+uint8_t display_buf[64]; //显示信息缓冲区
+uint32_t last_vision_time = 0; //上一次视觉识别时间
+int err_x = 0, err_y = 0;
+int distance = 0;
 #define RX_MAX_LEN 128  //串口dma中断
-char rx_buffer[RX_MAX_LEN+1]; //串口dma中断
-uint8_t  rx_flag = 0; //串口dma中断
+char rx_buffer[RX_MAX_LEN + 1]; //串口dma中断
+uint8_t rx_flag = 0; //串口dma中断
 uint16_t rx_packet_len = 0; //串口dma中断
 
 /* USER CODE END PTD */
@@ -111,87 +112,196 @@ int main(void)
   MX_I2C1_Init();
   MX_USART6_UART_Init();
   /* USER CODE BEGIN 2 */
-  OLED_Init();
-  OLED_Clear();
-  OLED_ShowString(0, 0, "System Init...", 12);
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+    OLED_Init();
+    OLED_Clear();
+    OLED_ShowString(0, 0, "System Init...", 12);
 
-  Motor_Init(&MotorA,
-             GPIOB, GPIO_PIN_0,
-             GPIOB, GPIO_PIN_1,
-             &htim4, TIM_CHANNEL_1,
-             &htim2);
+    Motor_Init(&MotorA,
+               GPIOB, GPIO_PIN_2,
+               GPIOB, GPIO_PIN_10,
+               &htim4, TIM_CHANNEL_1,
+               &htim2);
 
-  Motor_Init(&MotorB,
-             GPIOB, GPIO_PIN_10,
-             GPIOB, GPIO_PIN_2,
-             &htim4, TIM_CHANNEL_2,
-             &htim3);
-  Car_Strategy_Init();
-  HAL_UARTEx_ReceiveToIdle_DMA(&huart1, (uint8_t *)rx_buffer, RX_MAX_LEN);
-  HAL_TIM_Base_Start_IT(&htim10);
-  OLED_ShowString(0, 1, "Ready to Go!", 12);
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+    Motor_Init(&MotorB,
+               GPIOB, GPIO_PIN_1,
+               GPIOB, GPIO_PIN_0,
+               &htim4, TIM_CHANNEL_2,
+               &htim3);
+    Car_Strategy_Init();
+
+    HAL_TIM_Base_Start_IT(&htim10);
+    HAL_UARTEx_ReceiveToIdle_DMA(&huart1, (uint8_t*)rx_buffer, RX_MAX_LEN);
+
+    OLED_ShowString(0, 1, "Ready to Go!", 12);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-    // 视觉超时保护，100ms 没收到有效视觉包，自动退回循迹
-    if (car_mode == MODE_VISION_FOLLOW)
+    while (1)
     {
-      if (HAL_GetTick() - last_vision_time > 100)
-      {
-        car_mode = MODE_LINE_TRACKING;
-      }
-    }
 
-    // 视觉模式控制
-    if (finish_camera_task == 0)
-    {
-      if (rx_flag == 1)
-      {
-        int err_x = 0, err_y = 0, distance = 0;
+        static uint8_t key_lock = 0;
 
-        // 尝试解析标准的 逗号 分隔符
-        int matched = sscanf(rx_buffer, "%d,%d,%d", &err_x, &err_y, &distance);
-
-        if (matched == 3)
+        if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_15) == GPIO_PIN_RESET) // 检测到按键按下
         {
-          car_mode = MODE_VISION_FOLLOW;
-          last_vision_time = HAL_GetTick();
+            if (key_lock == 0)
+            {
+                HAL_Delay(20); // 软件消抖
+                if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_15) == GPIO_PIN_RESET)
+                {
+                    // 核心逻辑：在 TRACKING 和 FINISHED 之间来回翻转
+                    if (Current_Stop_State == STATE_TRACKING)
+                    {
+                        Current_Stop_State = STATE_FINISHED;
+                        finish_camera_task = 1;
 
-          // 激活外环控制逻辑
-          printf("Parsed OK: %d, %d, %d\n", err_x, err_y, distance);
-          track_camera((float)err_x, (float)distance);
+                        // 【安全保护】：强行切到完成状态时，立刻让电机断电停止
+                        Car_Set_Speed(&MotorA, 0);
+                        Car_Set_Speed(&MotorB, 0);
+                    }
+                    else
+                    {
+                        // 重新开始循迹
+                        car_mode = MODE_LINE_TRACKING;      // 确保主模式正确
+                        Current_Stop_State = STATE_TRACKING; // 切换回循迹阶段
+                        Car_Strategy_Init();
+                        distance = 0;
+                        finish_camera_task = 0;
+                    }
+
+                    key_lock = 1; // 锁死按键
+                }
+            }
         }
         else
         {
-          //
+            key_lock = 0; // 手松开，解锁
         }
-        rx_flag = 0;
-        memset(rx_buffer, 0, RX_MAX_LEN);
-      }
-    }
 
-    //显示信息
-    if (HAL_GetTick() - last_tick >= 100)
-    {
-      last_tick = HAL_GetTick();
-      sprintf((char *)display_buf, "Lt%.2f;Rt%.2f", MotorA.speed_target,MotorB.speed_target);
-      OLED_ShowString(0, 2, display_buf, 12);
-      sprintf((char *)display_buf, "Rr%.2f;Rr%.2f", MotorA.speed,MotorB.speed);
-      OLED_ShowString(0, 3, display_buf, 12);
-      if (car_mode == MODE_LINE_TRACKING) {
-        OLED_ShowString(0, 0, (uint8_t *)"Mode: TRACKING ", 16);
-      } else {
-        OLED_ShowString(0, 0, (uint8_t *)"Mode: VISION   ", 16);
-      }
-    }
+
+        // 视觉超时保护，100ms 没收到有效视觉包，自动退回循迹
+        if (car_mode == MODE_VISION_FOLLOW)
+        {
+            if (HAL_GetTick() - last_vision_time > 100)
+            {
+                car_mode = MODE_LINE_TRACKING;
+                Car_Set_Speed(&MotorA, 0);
+                Car_Set_Speed(&MotorB, 0);
+            }
+        }
+
+        // 视觉模式控制
+
+
+       if (rx_flag == 1)
+        {
+            // === 【核心优化 1】：引入影子缓冲区，保护活体 DMA 内存 ===
+            static char parse_buffer[RX_MAX_LEN + 1];
+
+            uint16_t len = rx_packet_len;
+            if (len > RX_MAX_LEN) len = RX_MAX_LEN;
+
+            // 瞬间把数据捞出来，不给 DMA 干扰的机会
+            memcpy(parse_buffer, rx_buffer, len);
+            parse_buffer[len] = '\0';
+
+            // 捞完数据立刻允许接收下一帧，且绝对不要对 rx_buffer 动用 memset！
+            rx_flag = 0;
+
+            // 局部变量初始化
+            int local_err_x = 0, local_err_y = 0, local_distance = 0;
+
+            // === 【核心优化 2】：推荐在 OpenMV 端将发送格式改为 "#%d,%d,%d\r\n" ===
+            // 如果 OpenMV 端加了 '#' 帧头，这里改成 sscanf(parse_buffer, "#%d,%d,%d", ...)
+            int matched = sscanf(parse_buffer, "#%d,%d,%d", &local_err_x, &local_err_y, &local_distance);
+
+            if (matched == 3)
+            {
+                // 数据合法性刚性过滤（根据 OpenMV 实际范围加一道防火墙）
+                // 既然 OpenMV 只发 20~100，任何超出这个范围的数据直接丢弃！
+                if (local_distance >= 10 && local_distance <= 110)
+                {
+                    // 校验通过，再赋值给全局变量
+                    err_x = local_err_x;
+                    err_y = local_err_y;
+                    distance = local_distance;
+
+                    if (finish_camera_task == 0)
+                    {
+                        if (car_mode == MODE_LINE_TRACKING && distance <= STOP_DISTANCE)
+                        {
+                            car_mode = MODE_VISION_FOLLOW;
+                        }
+
+                        if (car_mode == MODE_VISION_FOLLOW)
+                        {
+                            last_vision_time = HAL_GetTick();
+
+                            // 你的刚性限幅保持
+                            if (distance >= 100) distance = 100;
+
+                            track_camera((float)err_x, (float)distance);
+                        }
+                    }
+                }
+            }
+            // 【核心优化 3】：删除了原先的 memset(rx_buffer, 0, RX_MAX_LEN);
+        }
+
+
+        //显示信息
+        if (HAL_GetTick() - last_tick >= 500)
+        {
+            last_tick = HAL_GetTick();
+            sprintf((char*)display_buf, "dist:%d     ", distance);
+            OLED_ShowString(0, 6, display_buf, 16);
+            sprintf((char*)display_buf, "Lt%.2f;Rt%.2f", MotorA.speed_target, MotorB.speed_target);
+            OLED_ShowString(0, 0, display_buf, 12);
+
+            sprintf((char*)display_buf, "Lr%.2f;Rr%.2f", MotorA.speed, MotorB.speed);
+            OLED_ShowString(0, 1, display_buf, 12);
+
+
+            if (car_mode == MODE_LINE_TRACKING)
+            {
+                OLED_ShowString(0, 2, (uint8_t*)"Mode: TRACKING ", 12);
+            }
+            if (car_mode == MODE_VISION_FOLLOW)
+            {
+                OLED_ShowString(0, 2, (uint8_t*)"Mode: VISION   ", 12);
+            }
+            if (car_mode == MODE_STANDBY)
+            {
+                OLED_ShowString(0, 2, (uint8_t*)"Mode: STANDBY   ", 12);
+            }
+            if (car_mode == MODE_BACKING)
+            {
+                OLED_ShowString(0, 2, (uint8_t*)"Mode: BACKING   ", 12);
+            }
+
+            if (Current_Stop_State == STATE_TRACKING)
+            {
+                OLED_ShowString(0, 3, (uint8_t*)"Mode1", 12);
+            }
+            if (Current_Stop_State == STATE_CROSSING_BAR)
+            {
+                OLED_ShowString(0, 3, (uint8_t*)"Mode2", 12);
+            }
+            if (Current_Stop_State == STATE_MOVE_TO_GARAGE)
+            {
+                OLED_ShowString(0, 3, (uint8_t*)"Mode3", 12);
+            }
+            if (Current_Stop_State == STATE_FINISHED)
+            {
+                OLED_ShowString(0, 3, (uint8_t*)"Mode4", 12);
+            }
+        }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-  }
+    }
   /* USER CODE END 3 */
 }
 
@@ -243,9 +353,6 @@ void SystemClock_Config(void)
 /* USER CODE BEGIN 4 */
 
 
-
-
-
 #ifdef __GNUC__
 #define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
 #else
@@ -253,8 +360,8 @@ void SystemClock_Config(void)
 #endif
 PUTCHAR_PROTOTYPE
 {
-  HAL_UART_Transmit(&huart1, (uint8_t*)&ch, 1, 0xFFFF);
-  return ch;
+    HAL_UART_Transmit(&huart1, (uint8_t*)&ch, 1, 0xFFFF);
+    return ch;
 }
 
 
@@ -263,28 +370,27 @@ PUTCHAR_PROTOTYPE
  * @param  huart
  * @param  Size: DMA 硬件自动统计出的这一帧文字的总字节数
  */
-void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t Size)
 {
-  if (huart->Instance == USART1)
-  {
-    // 健壮性保护：如果异常数据超过了设定的最大长度，强行截断，防止打爆内存
-    if (Size > RX_MAX_LEN) {Size = RX_MAX_LEN;}
-    rx_packet_len = Size;
-    rx_buffer[Size] = '\0';
+    if (huart->Instance == USART1)
+    {
+        // 健壮性保护：如果异常数据超过了设定的最大长度，强行截断，防止打爆内存
+        if (Size > RX_MAX_LEN) { Size = RX_MAX_LEN; }
+        rx_packet_len = Size;
+        rx_buffer[Size] = '\0';
 
-    rx_flag = 1;
-    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_13);
-    HAL_UARTEx_ReceiveToIdle_DMA(&huart1, (uint8_t *)rx_buffer, RX_MAX_LEN);
-  }
+        rx_flag = 1;
+        HAL_UARTEx_ReceiveToIdle_DMA(&huart1, (uint8_t*)rx_buffer, RX_MAX_LEN);
+    }
 }
 
-void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+void HAL_UART_ErrorCallback(UART_HandleTypeDef* huart)
 {
-  if (huart->Instance == USART1)
-  {
-    __HAL_UART_CLEAR_OREFLAG(huart);
-    HAL_UARTEx_ReceiveToIdle_DMA(&huart1, (uint8_t *)rx_buffer, RX_MAX_LEN);
-  }
+    if (huart->Instance == USART1)
+    {
+        __HAL_UART_CLEAR_OREFLAG(huart);
+        HAL_UARTEx_ReceiveToIdle_DMA(&huart1, (uint8_t*)rx_buffer, RX_MAX_LEN);
+    }
 }
 
 
@@ -297,11 +403,11 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
-  __disable_irq();
-  while (1)
-  {
-  }
+    /* User can add his own implementation to report the HAL error return state */
+    __disable_irq();
+    while (1)
+    {
+    }
   /* USER CODE END Error_Handler_Debug */
 }
 #ifdef USE_FULL_ASSERT
@@ -315,8 +421,8 @@ void Error_Handler(void)
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+    /* User can add his own implementation to report the file name and line number,
+       ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */

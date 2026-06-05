@@ -42,10 +42,10 @@
 // #define MOTOR_SPEED_KD           1.0f   // 微分系数
 // #define MOTOR_SPEED_I_LIMIT      1000.0f  // 积分限幅 (防止积分饱和)
 
-#define MOTOR_SPEED_KP           1.5f   // 比例系数
-#define MOTOR_SPEED_KI           0.2f   // 积分系数
-#define MOTOR_SPEED_KD           0.5f   // 微分系数
-#define MOTOR_SPEED_I_LIMIT      1500.0f  // 积分限幅 (防止积分饱和)
+#define MOTOR_SPEED_KP           0.45f   // 比例系数
+#define MOTOR_SPEED_KI           0.05f   // 积分系数
+#define MOTOR_SPEED_KD           0.0f   // 微分系数
+#define MOTOR_SPEED_I_LIMIT      1000.0f  // 积分限幅 (防止积分饱和)
 
 // --- 位置环 PID 参数 (Position Loop - 轨迹规划辅助) ---
 #define MOTOR_POS_KP             0.50f
